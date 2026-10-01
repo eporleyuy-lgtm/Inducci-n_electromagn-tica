@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulador de Fuerza Electromotriz (FEM)</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f9; text-align: center; margin: 15px; }
+        .contenedor { max-width: 850px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        
+        /* Navegación por Pestañas */
+        .pestanas { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; }
+        .btn-pestana { padding: 10px 20px; font-size: 14px; font-weight: bold; cursor: pointer; border: none; background: #e9ecef; color: #495057; border-radius: 5px 5px 0 0; transition: 0.2s; }
+        .btn-pestana.activa { background: #007bff; color: white; }
+        .seccion-pestana { display: none; }
+        .seccion-pestana.activa { display: block; }
+
+        canvas { background: #ffffff; border: 1px solid #ccc; display: block; margin: 10px auto; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+        .controles { margin: 12px 0; display: flex; justify-content: center; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .control-grupo { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: bold; }
+        input[type=range] { width: 90px; }
+        select { padding: 6px 10px; font-size: 13px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+        button { padding: 8px 16px; font-size: 14px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+
+        /* Estilos de la Tabla de Datos */
+        .tabla-contenedor { margin-top: 15px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+        th, td { border: 1px solid #dee2e6; padding: 6px 10px; text-align: center; }
+        th { background-color: #007bff; color: white; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+
+<div class="contenedor">
+    <!-- Menú de Pestañas -->
+    <div class="pestanas">
+        <button class="btn-pestana activa" onclick="cambiarPestana('pestanaPila', this)">1. FEM Química (Pila y Lámpara)</button>
+        <button class="btn-pestana" onclick="cambiarPestana('pestanaInduccion', this)">2. FEM Inducida (Faraday/Lenz)</button>
+    </div>
+
+    <!-- PESTAÑA 1: CIRCUITO CON PILA Y LÁMPARA -->
+    <div id="pestanaPila" class="seccion-pestana activa">
+        <h2>Circuito Eléctrico con Fuente Química (Pila)</h2>
+        
+        <div class="controles">
+            <div class="control-grupo">
+                <label for="vPila">FEM de la Pila (Ɛ):</label>
+                <input type="range" id="vPila" min="0" max="12" step="1" value="6" oninput="actualizarPila()">
+                <span id="valVPila">6.0 V</span>
+            </div>
+
+            <button id="btnInterruptor" onclick="alternarInterruptor()" style="background:#dc3545;">🔴 Circuito Abierto</button>
+        </div>
+
+        <canvas id="lienzoPila" width="800" height="420"></canvas>
+    </div>
+
+    <!-- PESTAÑA 2: INDUCCIÓN ELECTROMAGNÉTICA -->
+    <div id="pestanaInduccion" class="seccion-pestana">
+        <h2>FEM e Inducción en una Espira Circular</h2>
+        
+        <div class="controles">
+            <div class="control-grupo">
+                <label for="radioEspira">Radio Espira:</label>
+                <input type="range" id="radioEspira" min="40" max="75" step="5" value="40" oninput="actualizarValores()">
+                <span id="valRadio">40 px</span>
+            </div>
+
+            <div class="control-grupo">
+                <label for="fuerzaB">Campo (B):</label>
+                <input type="range" id="fuerzaB" min="1" max="5" step="1" value="1" oninput="actualizarValores()">
+                <span id="valFuerza">1</span>
+            </div>
+
+            <div class="control-grupo">
+                <label for="modoRitmo">Movimiento:</label>
+                <select id="modoRitmo" onchange="cambiarRitmo()">
+                    <option value="0.018" selected>Paso Suave</option>
+                    <option value="0.038">Paso Moderado</option>
+                    <option value="0.075">Paso Enérgico</option>
+                </select>
+            </div>
+
+            <button onclick="invertirPolaridad()" style="background:#17a2b8;">⇄ Invertir Polos (N/S)</button>
+            <button id="btnAuto" onclick="alternarAuto()" style="background:#28a745;">▶ Oscilar Imán</button>
+        </div>
+
+        <canvas id="lienzo" width="800" height="420"></canvas>
+        
+        <div class="controles">
+            <button onclick="registrarDatoManual()" style="background:#6c757d;">📌 Registrar Lectura Actual</button>
+            <button onclick="limpiarTabla()" style="background:#dc3545;">🧹 Limpiar Tabla</button>
+        </div>
+
+        <div class="tabla-contenedor">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Radio (r)</th>
+                        <th>Área rel. (A ∝ r²)</th>
+                        <th>Campo (B)</th>
+                        <th>Polo Entrante</th>
+                        <th>FEM Inducida (Ɛ)</th>
+                    </tr>
+                </thead>
+                <tbody id="cuerpoTabla">
+                    <tr><td colspan="6" style="color: #6c757d;">Mueve el imán para registrar datos automáticamente o presiona 'Registrar'</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- GESTIÓN DE PESTAÑAS ---
+function cambiarPestana(idPestana, btn) {
+    document.querySelectorAll('.seccion-pestana').forEach(el => el.classList.remove('activa'));
+    document.querySelectorAll('.btn-pestana').forEach(el => el.classList.remove('activa'));
+
+    document.getElementById(idPestana).classList.add('activa');
+    btn.classList.add('activa');
+
+    if (idPestana === 'pestanaPila') {
+        dibujarPila();
+    } else {
+        dibujar();
+    }
+}
+
+// --- CÓDIGO PESTAÑA 1: CIRCUITO PILA Y LÁMPARA ---
+const canvasPila = document.getElementById("lienzoPila");
+const ctxPila = canvasPila.getContext("2d");
+
+let vPila = 6;
+let circuitoCerrado = false;
+
+function actualizarPila() {
+    vPila = parseFloat(document.getElementById("vPila").value);
+    document.getElementById("valVPila").innerText = vPila.toFixed(1) + " V";
+    dibujarPila();
+}
+
+function alternarInterruptor() {
+    circuitoCerrado = !circuitoCerrado;
+    let btn = document.getElementById("btnInterruptor");
+    if (circuitoCerrado) {
+        btn.innerText = "🟢 Circuito Cerrado";
+        btn.style.background = "#28a745";
+    } else {
+        btn.innerText = "🔴 Circuito Abierto";
+        btn.style.background = "#dc3545";
+    }
+    dibujarPila();
+}
+
+function dibujarPila() {
+    ctxPila.clearRect(0, 0, canvasPila.width, canvasPila.height);
+
+    // Coordenadas de la Malla Rectangular Principal del Circuito
+    let xIzquierda = 200;
+    let xDerecha = 600;
+    let yArriba = 220;
+    let yAbajo = 350;
+
+    // 1. CONDUCTORES / CABLES (Trazado continuo de cobre)
+    ctxPila.strokeStyle = "#b87333"; // Color Cobre
+    ctxPila.lineWidth = 5;
+    ctxPila.lineCap = "round";
+    ctxPila.lineJoin = "round";
+
+    // Tramo Inferior (conectado a la pila)
+    ctxPila.beginPath();
+    ctxPila.moveTo(xIzquierda, yAbajo);
+    ctxPila.lineTo(330, yAbajo); // Cable a borne negativo
+    ctxPila.moveTo(470, yAbajo); // Cable desde borne positivo
+    ctxPila.lineTo(xDerecha, yAbajo);
+    
+    // Tramos Laterales Verticual
+    ctxPila.lineTo(xDerecha, yArriba); // Lateral Derecho
+    ctxPila.moveTo(xIzquierda, yAbajo);
+    ctxPila.lineTo(xIzquierda, yArriba); // Lateral Izquierdo
+
+    // Tramo Superior
+    ctxPila.lineTo(360, yArriba); // Hacia la lámpara (izquierda)
+    ctxPila.moveTo(440, yArriba); // Desde la lámpara
+    ctxPila.lineTo(520, yArriba); // Hacia el interruptor
+    ctxPila.stroke();
+
+    // 2. INTERRUPTOR DE CUCHILLA (Ubicado en la rama superior derecha)
+    let intX = 520;
+    // Bornes
+    ctxPila.fillStyle = "#d4af37";
+    ctxPila.beginPath(); ctxPila.arc(intX, yArriba, 6, 0, Math.PI * 2); ctxPila.fill();
+    ctxPila.beginPath(); ctxPila.arc(intX + 50, yArriba, 6, 0, Math.PI * 2); ctxPila.fill();
+
+    // Palanca/Cuchilla
+    ctxPila.strokeStyle = "#333";
+    ctxPila.lineWidth = 4;
+    ctxPila.beginPath();
+    ctxPila.moveTo(intX, yArriba);
+    if (circuitoCerrado) {
+        ctxPila.lineTo(intX + 50, yArriba);
+    } else {
+        ctxPila.lineTo(intX + 42, yArriba - 30); // Posición Abierta
+    }
+    ctxPila.stroke();
+
+    // Conexión del cable desde interruptor a la esquina derecha
+    ctxPila.strokeStyle = "#b87333";
+    ctxPila.lineWidth = 5;
+    ctxPila.beginPath();
+    ctxPila.moveTo(intX + 50, yArriba);
+    ctxPila.lineTo(xDerecha, yArriba);
+    ctxPila.stroke();
+
+    // 3. FUENTE QUÍMICA (PILAMETÁLICA ESTÁNDAR - Abajo al Centro)
+    let pilaX = 330, pilaY = yAbajo - 20, pilaW = 140, pilaH = 40;
+    
+    // Cuerpo de la Pila (Negro)
+    ctxPila.fillStyle = "#2c3e50";
+    ctxPila.fillRect(pilaX, pilaY, pilaW - 25, pilaH);
+    ctxPila.strokeStyle = "#000"; ctxPila.lineWidth = 1.5;
+    ctxPila.strokeRect(pilaX, pilaY, pilaW - 25, pilaH);
+
+    // Franja Positiva (Roja/Dorada)
+    ctxPila.fillStyle = "#e74c3c";
+    ctxPila.fillRect(pilaX + pilaW - 25, pilaY, 25, pilaH);
+    ctxPila.strokeRect(pilaX + pilaW - 25, pilaY, 25, pilaH);
+
+    // Borne Positivo (+ Saliente)
+    ctxPila.fillStyle = "#bdc3c7";
+    ctxPila.fillRect(pilaX + pilaW, pilaY + 12, 8, 16);
+    ctxPila.strokeRect(pilaX + pilaW, pilaY + 12, 8, 16);
+
+    // Textos de Polos en la Pila
+    ctxPila.fillStyle = "#fff"; ctxPila.font = "bold 16px Arial";
+    ctxPila.fillText("-", pilaX + 15, pilaY + 25);
+    ctxPila.fillText("+", pilaX + pilaW - 18, pilaY + 25);
+    ctxPila.fillStyle = "#fff"; ctxPila.font = "bold 12px Arial";
+    ctxPila.fillText("PILA", pilaX + 45, pilaY + 25);
+
+    // 4. LÁMPARA (AMPOLLETA TRADICIONAL - En la rama superior)
+    let lamparaX = 400, lamparaY = yArriba;
+    let brillo = circuitoCerrado ? (vPila / 12) : 0;
+
+    // Resplandor si está encendida
+    if (brillo > 0) {
+        let grad = ctxPila.createRadialGradient(lamparaX, lamparaY - 15, 10, lamparaX, lamparaY - 15, 55 + brillo * 20);
+        grad.addColorStop(0, `rgba(255, 235, 59, ${0.8 * brillo})`);
+        grad.addColorStop(1, "rgba(255, 235, 59, 0)");
+        ctxPila.fillStyle = grad;
+        ctxPila.beginPath(); ctxPila.arc(lamparaX, lamparaY - 15, 55 + brillo * 20, 0, Math.PI * 2); ctxPila.fill();
+    }
+
+    // Rosca / Socket de la ampolleta
+    ctxPila.fillStyle = "#7f8c8d";
+    ctxPila.fillRect(lamparaX - 12, lamparaY - 8, 24, 16);
+    ctxPila.strokeStyle = "#333"; ctxPila.lineWidth = 1;
+    ctxPila.strokeRect(lamparaX - 12, lamparaY - 8, 24, 16);
+
+    // Cristal de la ampolleta
+    ctxPila.beginPath();
+    ctxPila.arc(lamparaX, lamparaY - 22, 20, 0, Math.PI * 2);
+    ctxPila.fillStyle = brillo > 0 ? `rgba(255, 241, 118, ${0.5 + brillo * 0.5})` : "rgba(236, 240, 241, 0.6)";
+    ctxPila.fill();
+    ctxPila.strokeStyle = "#333"; ctxPila.lineWidth = 1.5; ctxPila.stroke();
+
+    // Filamento interior
+    ctxPila.beginPath();
+    ctxPila.moveTo(lamparaX - 7, lamparaY - 10);
+    ctxPila.lineTo(lamparaX - 3, lamparaY - 26);
+    ctxPila.lineTo(lamparaX + 3, lamparaY - 26);
+    ctxPila.lineTo(lamparaX + 7, lamparaY - 10);
+    ctxPila.strokeStyle = brillo > 0 ? "#d35400" : "#7f8c8d";
+    ctxPila.lineWidth = 1.5;
+    ctxPila.stroke();
+
+    // 5. CABLES DE PRUEBA Y VOLTÍMETRO EN PARALELO
+    let cx = 170, cy = 80;
+    
+    // Cable de Prueba Rojo (al polo positivo de la pila)
+    ctxPila.strokeStyle = "#e74c3c"; ctxPila.lineWidth = 2.5; ctxPila.setLineDash([4, 4]);
+    ctxPila.beginPath();
+    ctxPila.moveTo(cx + 40, cy + 50);
+    ctxPila.bezierCurveTo(cx + 60, cy + 180, 460, 250, 475, yAbajo);
+    ctxPila.stroke();
+
+    // Cable de Prueba Negro (al polo negativo de la pila)
+    ctxPila.strokeStyle = "#2c3e50"; ctxPila.lineWidth = 2.5;
+    ctxPila.beginPath();
+    ctxPila.moveTo(cx - 40, cy + 50);
+    ctxPila.bezierCurveTo(cx - 60, cy + 180, 280, 250, 325, yAbajo);
+    ctxPila.stroke();
+    ctxPila.setLineDash([]); // Restaurar línea sólida
+
+    // Carcasa del Voltímetro
+    ctxPila.fillStyle = "#343a40"; ctxPila.fillRect(cx - 75, cy - 65, 150, 125); ctxPila.strokeRect(cx - 75, cy - 65, 150, 125);
+    ctxPila.fillStyle = "#f8f9fa"; ctxPila.fillRect(cx - 65, cy - 55, 130, 65); ctxPila.strokeRect(cx - 65, cy - 55, 130, 65);
+
+    // Escala analógica (0V a 12V DC)
+    ctxPila.beginPath(); ctxPila.arc(cx, cy, 48, Math.PI * 1.2, Math.PI * 1.8); ctxPila.strokeStyle = "#000"; ctxPila.lineWidth = 1; ctxPila.stroke();
+    const lecturasPila = [0, 3, 6, 9, 12];
+    lecturasPila.forEach(val => {
+        let ang = Math.PI * 1.2 + (val / 12) * (Math.PI * 0.6);
+        ctxPila.beginPath();
+        ctxPila.moveTo(cx + Math.cos(ang) * 40, cy + Math.sin(ang) * 40);
+        ctxPila.lineTo(cx + Math.cos(ang) * 48, cy + Math.sin(ang) * 48);
+        ctxPila.strokeStyle = "#000"; ctxPila.stroke();
+    });
+
+    let vMedidoPila = circuitoCerrado ? vPila : 0;
+    let angAguja = Math.PI * 1.2 + (vMedidoPila / 12) * (Math.PI * 0.6);
+    ctxPila.beginPath(); ctxPila.moveTo(cx, cy);
+    ctxPila.lineTo(cx + Math.cos(angAguja) * 44, cy + Math.sin(angAguja) * 44);
+    ctxPila.strokeStyle = "#e74c3c"; ctxPila.lineWidth = 2.5; ctxPila.stroke();
+
+    // Pantalla digital del voltímetro
+    ctxPila.fillStyle = "#000"; ctxPila.fillRect(cx - 35, cy + 18, 70, 20);
+    ctxPila.fillStyle = "#00ff00"; ctxPila.font = "bold 13px 'Courier New', monospace";
+    let textoVP = vMedidoPila.toFixed(1) + " V";
+    ctxPila.fillText(textoVP, cx - ctxPila.measureText(textoVP).width / 2, cy + 33);
+
+    ctxPila.fillStyle = "#fff"; ctxPila.font = "bold 12px Arial";
+    ctxPila.fillText("VOLTÍMETRO DC", cx - ctxPila.measureText("VOLTÍMETRO DC").width / 2, cy - 2);
+
+    // 6. SENTIDO DE CORRIENTE CONTINUA (I)
+    if (circuitoCerrado && vPila > 0) {
+        dibujarFlechaPila(200, 280, -Math.PI / 2, "#00e676");
+        dibujarFlechaPila(470, yArriba, 0, "#00e676");
+        dibujarFlechaPila(600, 280, Math.PI / 2, "#00e676");
+        
+        ctxPila.fillStyle = "#00e676"; ctxPila.font = "bold italic 16px Times New Roman";
+        ctxPila.fillText("I (continua)", 220, yArriba - 12);
+    }
+}
+
+function dibujarFlechaPila(x, y, angulo, color) {
+    ctxPila.fillStyle = color; ctxPila.strokeStyle = "#000"; ctxPila.lineWidth = 1;
+    ctxPila.beginPath(); ctxPila.moveTo(x, y);
+    ctxPila.lineTo(x - 12 * Math.cos(angulo - Math.PI / 5), y - 12 * Math.sin(angulo - Math.PI / 5));
+    ctxPila.lineTo(x - 12 * Math.cos(angulo + Math.PI / 5), y - 12 * Math.sin(angulo + Math.PI / 5));
+    ctxPila.closePath(); ctxPila.fill(); ctxPila.stroke();
+}
+
+
+// --- CÓDIGO PESTAÑA 2: INDUCCIÓN ELECTROMAGNÉTICA ---
+const canvas = document.getElementById("lienzo");
+const ctx = canvas.getContext("2d");
+
+let radioEspira = 40;
+let B_fuerza = 1;
+let poloNorteIzquierda = true;
+let incrementoPaso = 0.018;
+
+let imanX = 600;
+let imanY = 250;
+let imanAncho = 150;
+let imanAlto = 36;
+let arrastrando = false;
+let offsetX = 0;
+
+let vIman = 0;
+let xAnterior = imanX;
+let voltajeCalculado = 0;
+let voltajeMedido = 0;
+let voltajeSuave = 0;
+
+let autoOscilando = false;
+let idAuto = null;
+let tAuto = 0;
+
+let historialDatos = [];
+let contadorLecturas = 0;
+let ultimoRegistroT = 0;
+
+function actualizarValores() {
+    radioEspira = parseInt(document.getElementById("radioEspira").value);
+    B_fuerza = parseInt(document.getElementById("fuerzaB").value);
+    document.getElementById("valRadio").innerText = radioEspira + " px";
+    document.getElementById("valFuerza").innerText = B_fuerza;
+    dibujar();
+}
+
+function cambiarRitmo() { incrementoPaso = parseFloat(document.getElementById("modoRitmo").value); }
+function invertirPolaridad() { poloNorteIzquierda = !poloNorteIzquierda; dibujar(); }
+
+function alternarAuto() {
+    autoOscilando = !autoOscilando;
+    let btn = document.getElementById("btnAuto");
+    if (autoOscilando) {
+        btn.innerText = "⏸ Pausar Oscilación";
+        btn.style.background = "#ffc107";
+        btn.style.color = "#000";
+        animarAuto();
+    } else {
+        btn.innerText = "▶ Oscilar Imán";
+        btn.style.background = "#28a745";
+        btn.style.color = "#fff";
+        if (idAuto) cancelAnimationFrame(idAuto);
+    }
+}
+
+canvas.addEventListener("mousedown", (e) => iniciarArrastre(e.clientX, e.clientY));
+canvas.addEventListener("mousemove", (e) => moverArrastre(e.clientX, e.clientY));
+canvas.addEventListener("mouseup", finalizarArrastre);
+canvas.addEventListener("mouseleave", finalizarArrastre);
+
+function iniciarArrastre(clientX, clientY) {
+    if (autoOscilando) alternarAuto();
+    let rect = canvas.getBoundingClientRect();
+    let mx = clientX - rect.left;
+    let my = clientY - rect.top;
+    if (mx >= imanX - imanAncho/2 && mx <= imanX + imanAncho/2 && my >= imanY - imanAlto/2 && my <= imanY + imanAlto/2) {
+        arrastrando = true;
+        offsetX = mx - imanX;
+    }
+}
+
+function moverArrastre(clientX, clientY) {
+    if (!arrastrando) return;
+    let rect = canvas.getBoundingClientRect();
+    let mx = clientX - rect.left;
+    imanX = Math.max(410, Math.min(740, mx - offsetX));
+    vIman = imanX - xAnterior;
+    xAnterior = imanX;
+    calcularVoltaje();
+    autoRegistrarTabla();
+    dibujar();
+}
+
+function finalizarArrastre() { arrastrando = false; vIman = 0; dibujar(); }
+
+function calcularVoltaje() {
+    let centroEspira = 380;
+    let halfW = imanAncho / 2;
+    let xCaraFrontal = poloNorteIzquierda ? (imanX - halfW) : (imanX + halfW);
+    let distanciaCara = Math.abs(xCaraFrontal - centroEspira);
+    
+    let factorPerfil = Math.exp(-Math.pow(distanciaCara / 120, 2));
+    let sentidoPolaridad = poloNorteIzquierda ? -1 : 1;
+    let factorArea = Math.pow(radioEspira / 60, 2); 
+    
+    voltajeCalculado = (B_fuerza * 3.2) * (vIman * 2.1) * factorPerfil * factorArea * sentidoPolaridad;
+    voltajeMedido = Math.max(-30, Math.min(30, voltajeCalculado));
+
+    if (Math.abs(voltajeMedido) > Math.abs(voltajeSuave)) {
+        voltajeSuave = voltajeMedido;
+    } else {
+        voltajeSuave *= 0.82;
+    }
+}
+
+function autoRegistrarTabla() {
+    let ahora = Date.now();
+    let valEval = Math.abs(voltajeMedido) > 0.1 ? voltajeMedido : voltajeSuave;
+    if (Math.abs(valEval) > 0.5 && (ahora - ultimoRegistroT > 350)) {
+        ultimoRegistroT = ahora;
+        agregarFilaTabla();
+    }
+}
+
+function registrarDatoManual() { agregarFilaTabla(); }
+
+function agregarFilaTabla() {
+    contadorLecturas++;
+    let factorArea = Math.pow(radioEspira / 60, 2).toFixed(2);
+    let valReal = Math.abs(voltajeCalculado) > 0.1 ? voltajeCalculado : voltajeSuave;
+    let voltTexto = valReal > 30 ? "> +30.0 mV (SAT)" : (valReal < -30 ? "< -30.0 mV (SAT)" : (valReal >= 0 ? "+" : "") + valReal.toFixed(1) + " mV");
+
+    historialDatos.unshift({ id: contadorLecturas, r: radioEspira + " px", area: factorArea + "x", B: B_fuerza, polo: poloNorteIzquierda ? "Polo N" : "Polo S", fem: voltTexto });
+    if (historialDatos.length > 6) historialDatos.pop();
+    actualizarVistaTabla();
+}
+
+function actualizarVistaTabla() {
+    let cuerpo = document.getElementById("cuerpoTabla");
+    if (historialDatos.length === 0) {
+        cuerpo.innerHTML = `<tr><td colspan="6" style="color: #6c757d;">Mueve el imán para registrar datos automáticamente o presiona 'Registrar'</td></tr>`;
+        return;
+    }
+    let html = "";
+    historialDatos.forEach(d => {
+        let esSaturado = d.fem.includes("SAT");
+        let colorTexto = esSaturado ? "#d9534f" : (parseFloat(d.fem) >= 0 ? "#28a745" : "#dc3545");
+        html += `<tr><td><b>${d.id}</b></td><td>${d.r}</td><td>${d.area}</td><td>${d.B}</td><td>${d.polo}</td><td style="color:${colorTexto}; font-weight:bold;">${d.fem}</td></tr>`;
+    });
+    cuerpo.innerHTML = html;
+}
+
+function limpiarTabla() { historialDatos = []; contadorLecturas = 0; actualizarVistaTabla(); }
+
+function animarAuto() {
+    if (!autoOscilando) return;
+    tAuto += incrementoPaso;
+    let xNueva = 500 + Math.sin(tAuto) * 80;
+    vIman = xNueva - imanX;
+    imanX = xNueva;
+    calcularVoltaje();
+    autoRegistrarTabla();
+    dibujar();
+    idAuto = requestAnimationFrame(animarAuto);
+}
+
+function dibujarVoltimetro(cx, cy) {
+    ctx.fillStyle = "#343a40"; ctx.strokeStyle = "#212529"; ctx.lineWidth = 3;
+    ctx.fillRect(cx - 80, cy - 80, 160, 140); ctx.strokeRect(cx - 80, cy - 80, 160, 140);
+
+    ctx.fillStyle = "#f8f9fa"; ctx.fillRect(cx - 70, cy - 70, 140, 70);
+    ctx.strokeStyle = "#adb5bd"; ctx.lineWidth = 1.5; ctx.strokeRect(cx - 70, cy - 70, 140, 70);
+
+    ctx.beginPath(); ctx.arc(cx, cy - 5, 52, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.strokeStyle = "#000"; ctx.stroke();
+
+    const lecturas = [-30, -15, 0, 15, 30];
+    lecturas.forEach(val => {
+        let ang = Math.PI * 1.5 + (val / 30) * (Math.PI * 0.35);
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(ang) * 44, (cy - 5) + Math.sin(ang) * 44);
+        ctx.lineTo(cx + Math.cos(ang) * 52, (cy - 5) + Math.sin(ang) * 52);
+        ctx.strokeStyle = (val === 0) ? "#dc3545" : "#000";
+        ctx.lineWidth = (val === 0) ? 2.5 : 1;
+        ctx.stroke();
+    });
+
+    let vLectura = Math.abs(voltajeMedido) > 0.05 ? voltajeMedido : voltajeSuave;
+    let angAguja = Math.PI * 1.5 + (vLectura / 30) * (Math.PI * 0.35);
+    ctx.beginPath(); ctx.moveTo(cx, cy - 5);
+    ctx.lineTo(cx + Math.cos(angAguja) * 48, (cy - 5) + Math.sin(angAguja) * 48);
+    ctx.strokeStyle = "#dc3545"; ctx.lineWidth = 2.5; ctx.stroke();
+
+    ctx.fillStyle = "#000"; ctx.fillRect(cx - 38, cy + 8, 76, 22);
+
+    if (Math.abs(voltajeCalculado) > 30) {
+        ctx.fillStyle = "#ff0000"; ctx.font = "bold 13px 'Courier New', monospace";
+        ctx.fillText("OVER", cx - ctx.measureText("OVER").width / 2, cy + 23);
+    } else {
+        ctx.fillStyle = "#00ff00"; ctx.font = "bold 13px 'Courier New', monospace";
+        let textoV = (vLectura >= 0 ? "+" : "") + vLectura.toFixed(1) + " mV";
+        ctx.fillText(textoV, cx - ctx.measureText(textoV).width / 2, cy + 23);
+    }
+
+    ctx.beginPath(); ctx.arc(cx - 48, cy + 45, 6, 0, Math.PI*2); ctx.fillStyle="#c87d55"; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 48, cy + 45, 6, 0, Math.PI*2); ctx.fillStyle="#c87d55"; ctx.fill();
+
+    ctx.fillStyle = "#fff"; ctx.font = "bold 13px Arial";
+    ctx.fillText("VOLTÍMETRO", cx - ctx.measureText("VOLTÍMETRO").width / 2, cy - 5);
+}
+
+function dibujarFlecha(x, y, angulo, color, tamano = 12) {
+    ctx.fillStyle = color; ctx.strokeStyle = "#000"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    ctx.lineTo(x - tamano * Math.cos(angulo - Math.PI / 5), y - tamano * Math.sin(angulo - Math.PI / 5));
+    ctx.lineTo(x - tamano * Math.cos(angulo + Math.PI / 5), y - tamano * Math.sin(angulo + Math.PI / 5));
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+}
+
+function dibujarLineasCampoCerradas() {
+    let halfW = imanAncho / 2;
+    let posNorteX = poloNorteIzquierda ? (imanX - halfW) : (imanX + halfW);
+    let posSurX   = poloNorteIzquierda ? (imanX + halfW) : (imanX - halfW);
+
+    ctx.lineWidth = 1.4; ctx.strokeStyle = "rgba(0, 119, 204, 0.45)";
+    for (let k = 1; k <= B_fuerza; k++) {
+        let h = 25 + k * 22;
+        ctx.beginPath(); ctx.moveTo(posNorteX, imanY - 5);
+        ctx.bezierCurveTo(posNorteX - 50, imanY - h * 1.3, posSurX + 50, imanY - h * 1.3, posSurX, imanY - 5);
+        ctx.stroke();
+        let midX = (posNorteX + posSurX) / 2;
+        dibujarFlecha(midX, imanY - h * 0.95, poloNorteIzquierda ? 0 : Math.PI, "#0077cc", 9);
+
+        ctx.beginPath(); ctx.moveTo(posNorteX, imanY + 5);
+        ctx.bezierCurveTo(posNorteX - 50, imanY + h * 1.3, posSurX + 50, imanY + h * 1.3, posSurX, imanY + 5);
+        ctx.stroke();
+        dibujarFlecha(midX, imanY + h * 0.95, poloNorteIzquierda ? 0 : Math.PI, "#0077cc", 9);
+    }
+}
+
+function dibujarIman() {
+    dibujarLineasCampoCerradas();
+    let halfW = imanAncho / 2, halfH = imanAlto / 2;
+    ctx.fillStyle = poloNorteIzquierda ? "#dc3545" : "#007bff";
+    ctx.fillRect(imanX - halfW, imanY - halfH, halfW, imanAlto);
+    ctx.fillStyle = poloNorteIzquierda ? "#007bff" : "#dc3545";
+    ctx.fillRect(imanX, imanY - halfH, halfW, imanAlto);
+
+    ctx.strokeStyle = "#000"; ctx.lineWidth = 1.5; ctx.strokeRect(imanX - halfW, imanY - halfH, imanAncho, imanAlto);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 16px Arial";
+    ctx.fillText(poloNorteIzquierda ? "N" : "S", imanX - halfW / 2 - 6, imanY + 5);
+    ctx.fillText(poloNorteIzquierda ? "S" : "N", imanX + halfW / 2 - 6, imanY + 5);
+}
+
+function dibujarEspiraConAbertura() {
+    let centroX = 380, aberturaAngulo = 0.25; 
+    ctx.strokeStyle = "#c87d55"; ctx.lineWidth = 3;
+
+    let xTerminal1 = centroX + 12 * Math.cos(Math.PI / 2 - aberturaAngulo);
+    let yTerminal1 = imanY + radioEspira * Math.sin(Math.PI / 2 - aberturaAngulo);
+    let xTerminal2 = centroX + 12 * Math.cos(Math.PI / 2 + aberturaAngulo);
+    let yTerminal2 = imanY + radioEspira * Math.sin(Math.PI / 2 + aberturaAngulo);
+
+    ctx.beginPath(); ctx.moveTo(xTerminal1, yTerminal1); ctx.bezierCurveTo(centroX + 20, imanY + 110, 208, 220, 208, 135); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xTerminal2, yTerminal2); ctx.bezierCurveTo(centroX - 80, imanY + 110, 112, 220, 112, 135); ctx.stroke();
+
+    let vEvaluacion = Math.abs(voltajeMedido) > 0.05 ? voltajeMedido : voltajeSuave;
+    let sentidoI = vEvaluacion > 0 ? 1 : -1;
+
+    ctx.strokeStyle = "#000"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(centroX, imanY, 12, radioEspira, 0, Math.PI * 0.5 + aberturaAngulo, Math.PI * 1.5); ctx.stroke();
+    if (Math.abs(vEvaluacion) > 0.15) dibujarFlecha(centroX - 12, imanY, sentidoI > 0 ? -Math.PI / 2 : Math.PI / 2, "#00e676", 13);
+
+    dibujarIman();
+
+    ctx.strokeStyle = "#000"; ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.ellipse(centroX, imanY, 12, radioEspira, 0, Math.PI * 1.5, Math.PI * 2.5 - aberturaAngulo); ctx.stroke();
+    if (Math.abs(vEvaluacion) > 0.15) {
+        dibujarFlecha(centroX + 12, imanY, sentidoI > 0 ? Math.PI / 2 : -Math.PI / 2, "#00e676", 14);
+        ctx.fillStyle = "#00e676"; ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.font = "bold italic 22px Times New Roman";
+        ctx.fillText("I", centroX + 22, imanY + 6); ctx.strokeText("I", centroX + 22, imanY + 6);
+    }
+}
+
+function dibujar() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    dibujarVoltimetro(160, 90);
+    dibujarEspiraConAbertura();
+}
+
+function cicloGeneral() {
+    if (!autoOscilando && !arrastrando) {
+        calcularVoltaje();
+        if (Math.abs(voltajeSuave) > 0.05) dibujar();
+    }
+    requestAnimationFrame(cicloGeneral);
+}
+
+// Inicialización
+dibujarPila();
+cicloGeneral();
+</script>
+
+</body>
+</html>
